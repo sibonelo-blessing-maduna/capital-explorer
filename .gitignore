@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.log
+
+# SQLite data — never commit the database or its WAL/journal files
+server/data/*.db
+server/data/*.db-shm
+server/data/*.db-wal
+
+# Secrets — never commit real credentials; see server/.env.example
+server/.env
+.env
+.env.local
+
+# OS/editor cruft
+.DS_Store
+*.swp
