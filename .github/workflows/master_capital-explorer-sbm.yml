@@ -23,17 +23,36 @@ jobs:
         with:
           node-version: '22.x'
 
-      - name: npm install, build, and test
+      - name: Build server
         run: |
-          npm install
-          npm run build --if-present
-          npm run test --if-present
+          cd server
+          npm ci
+          npm run build
+
+      - name: Verify math engine (client's regression tests)
+        run: |
+          cd client
+          npm ci
+          npm run verify
+
+      - name: Build client
+        run: |
+          cd client
+          npm run build
+
+      - name: Assemble deployment package
+        run: |
+          mkdir -p deploy/server deploy/client
+          cp -r server/dist deploy/server/dist
+          cp -r server/node_modules deploy/server/node_modules
+          cp server/package.json deploy/server/package.json
+          cp -r client/dist deploy/client/dist
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: .
+          path: deploy
 
   deploy:
     runs-on: ubuntu-latest
