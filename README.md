@@ -1,5 +1,9 @@
 # Optimal Capital Partitioning — Interactive Explorer
 
+**Live**: [capital-explorer-sbm-fvgwezefhacyc7gn.uaenorth-01.azurewebsites.net](https://capital-explorer-sbm-fvgwezefhacyc7gn.uaenorth-01.azurewebsites.net)
+— hosted on Azure App Service (B1, Always On), redeployed automatically on every push to `master`
+(see "Continuous deployment" below).
+
 An interactive, in-browser companion to the paper *"Optimal Capital Partitioning Across
 Binary-Outcome Combinatorial Subsets"* by Sibonelo Blessing Maduna. Every panel recomputes live as
 you tweak the event universe, subset size k, weighting exponent alpha, risk-aversion lambda, or
@@ -14,12 +18,32 @@ target return tau — entirely client-side, with no server round-trip on any sli
 
 ```
 capital-explorer/
-├── client/     React + TypeScript + Vite single-page app (the math engine + UI)
-├── server/     Express + TypeScript API (auth, sessions, admin, site config) + SQLite
+├── client/                        React + TypeScript + Vite single-page app (the math engine + UI)
+├── server/                        Express + TypeScript API (auth, sessions, admin, site config) + SQLite
+├── .github/workflows/
+│   └── master_capital-explorer-sbm.yml   CI/CD: build, verify, deploy to Azure on push to master
 ├── ARCHITECTURE.md
 ├── MATH.md
 └── DEPLOY.md
 ```
+
+## Continuous deployment
+
+Every push to `master` runs [`.github/workflows/master_capital-explorer-sbm.yml`](./.github/workflows/master_capital-explorer-sbm.yml):
+
+1. **Build server** — `server/src` → `server/dist` (`tsc`).
+2. **Verify the math engine** — `cd client && npm run verify`, the same regression tests described in
+   `MATH.md`'s "Cross-checks" section (the alpha=1 hedge, mean-variance/hedge convergence, the
+   barbell closed-form vs. `scipy`, and more). **The deploy does not proceed if this fails.**
+3. **Build client** — `client/src` → `client/dist` (Vite).
+4. **Assemble** `server/dist` + `server/node_modules` + `client/dist` into the layout
+   `server/src/index.ts` expects at runtime, and deploy it to Azure App Service via OIDC
+   (federated credentials — no publish-profile secret to manage).
+
+The Azure Web App itself (`capital-explorer-sbm`, Linux, Node 22, B1 plan, Always On) stores its
+SQLite database at `DB_DIR=/home/data` — outside the folder each deploy overwrites — so users,
+sessions, and admin data survive every redeploy. See `DEPLOY.md`'s Azure section for how this was
+set up from scratch.
 
 ## Running it locally
 

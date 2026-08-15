@@ -98,3 +98,60 @@ Push to `main` (or whatever branch your host watches) and most of these hosts au
 SQLite database on the persistent disk survives redeploys as long as the disk stays attached — it
 does not survive deleting and recreating the service from scratch, so treat "delete the service"
 as "delete the database" and back up `server/data/app.db` first if you ever need to do that.
+
+## Alternative: Azure App Service (what this repo's live instance actually uses)
+
+The live deployment at the URL in `README.md` runs on Azure instead of Render, provisioned through
+the Azure Portal's own GitHub integration rather than by hand. The steps below are what was
+actually done, for reproducing this on a fresh Azure subscription (e.g. Azure for Students) or
+understanding the existing setup.
+
+### 1. Create the Web App through the Portal's Deployment Center
+
+[portal.azure.com](https://portal.azure.com) → **App Services** → **+ Create** → **Web App**:
+
+- **Runtime stack**: Node 22 LTS, **Linux**
+- **App Service Plan**: **Basic B1** — the free F1 tier can't stay "always on" (it sleeps after 20
+  minutes idle), which defeats the point of a permanently-running deployment.
+- Once created, use the Web App's own **Deployment Center** (left sidebar) to connect it to this
+  GitHub repo. Doing it this way — rather than a hand-written workflow with a downloaded publish
+  profile — makes Azure create a **user-assigned managed identity with OIDC federation** to the
+  repo and push a working GitHub Actions workflow plus the three secrets it needs
+  (`AZUREAPPSERVICE_CLIENTID_...`, `_TENANTID_...`, `_SUBSCRIPTIONID_...`) automatically. No
+  long-lived secret to copy or rotate.
+
+### 2. Fix the generated workflow for this monorepo
+
+The workflow Azure generates assumes a single-package app (`npm install && npm run build` at the
+repo root). This repo has no root `package.json` — `client/` and `server/` are separate packages —
+so that step needs replacing with one that builds each package and assembles the result into the
+layout `server/src/index.ts` expects at runtime (`client/dist` two directories up from
+`server/dist`). See [`.github/workflows/master_capital-explorer-sbm.yml`](./.github/workflows/master_capital-explorer-sbm.yml)
+for the working version, which also gates the deploy on `client`'s `npm run verify` (the math
+engine's regression tests) — a bad build never reaches production.
+
+### 3. Configure the Web App itself
+
+These are one-time settings, separate from the workflow, made in the Portal under the Web App's
+**Settings → Configuration**:
+
+- **General settings** tab:
+  - **Startup Command**: `node server/dist/index.js` — without this, Oryx's auto-detection finds
+    no entry point in a `client/` + `server/` layout and Azure silently serves its own placeholder
+    "Welcome" page instead of your app (with a `200` on `/`, which makes the failure easy to miss —
+    check `/api/health` instead of `/` when verifying a fresh deploy).
+  - **Always On**: On (only available on B1+).
+- **Application settings** tab — add every variable from `server/.env.example` except the
+  commented-out ones, plus one Azure-specific addition:
+  - `DB_DIR` = `/home/data` — **this is the one non-obvious setting.** Azure's zip-deploy replaces
+    the entire `/home/site/wwwroot` folder (where the app's code lives) on every push. Render's
+    model is a separate persistent disk mounted at a path you choose; Azure's is closer to "the
+    whole app folder is disposable, `/home` outside it is not." Pointing `DB_DIR` at a path outside
+    `wwwroot` (the app already supports this via `server/src/db.ts`'s `DB_DIR` env var) means the
+    SQLite file survives every future deploy instead of being wiped.
+  - Leave `COOKIE_SECURE` and `CLIENT_ORIGIN` unset, same reasoning as the Render section above.
+- Optional: **Health check** tab → check the box, probe path `/api/health` (the same endpoint used
+  above to verify a real deploy) — Azure will replace the instance if it stays unhealthy for an
+  hour straight.
+
+Saving Configuration changes restarts the app automatically.
