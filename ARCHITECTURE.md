@@ -265,6 +265,15 @@ three things and nothing more:
   without a deploy; they can't be used to raise the caps past what's actually been measured safe.
 - **Audit log** — every block/unblock, role change, and config edit, with the acting admin's user
   id, the action, and the target.
+- **Visitors** — total/unique page views (all-time, today, 7d, 30d), a 30-day traffic trend, and a
+  table of recent visits (path, an anonymous-visitor identifier, the signed-in user's email if any,
+  referrer, IP). The client fires one `POST /api/visits` per mount (`App.tsx`'s `useEffect`); since
+  this app has no client-side router (see §"Why there's no client-side router" in `App.tsx`), a
+  mount only ever happens on a real full-page navigation, so this is exactly one row per real visit,
+  never a double-count from in-app tab/route switches. Anonymous visitors are identified by a
+  first-party `vid` cookie (`routes/visits.ts`), not by IP or account — two tabs opened before
+  either has received that cookie will count as two visitors for what a person would call one visit,
+  the same accepted limitation every cookie-based visit counter has.
 
 What was deliberately **not built**: a live code editor, or a raw SQL / arbitrary-table editor,
 reachable from the public-facing admin panel. The original request included "change the internal

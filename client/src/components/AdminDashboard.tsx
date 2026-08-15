@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, type AdminUser, type AuditEntry, type PublicUser } from "../api";
+import { api, type AdminUser, type AuditEntry, type DailyVisitCount, type PageView, type PublicUser, type VisitSummary } from "../api";
+import { LineChart } from "./charts/LineChart";
 
 /**
  * AdminDashboard — the "make any account admin or block them or change the
@@ -11,7 +12,7 @@ import { api, type AdminUser, type AuditEntry, type PublicUser } from "../api";
  * public-facing remote-code-execution surface).
  */
 export function AdminDashboard({ user }: { user: PublicUser }) {
-  const [tab, setTab] = useState<"users" | "config" | "audit">("users");
+  const [tab, setTab] = useState<"users" | "config" | "audit" | "visitors">("users");
 
   return (
     <div className="container">
@@ -34,10 +35,14 @@ export function AdminDashboard({ user }: { user: PublicUser }) {
         <button className={tab === "audit" ? "active" : ""} onClick={() => setTab("audit")}>
           Audit log
         </button>
+        <button className={tab === "visitors" ? "active" : ""} onClick={() => setTab("visitors")}>
+          Visitors
+        </button>
       </nav>
       {tab === "users" && <UsersTab currentUser={user} />}
       {tab === "config" && <ConfigTab />}
       {tab === "audit" && <AuditTab />}
+      {tab === "visitors" && <VisitorsTab />}
     </div>
   );
 }
@@ -238,6 +243,116 @@ function ConfigTab() {
         </button>
       </div>
     </div>
+  );
+}
+
+function StatTile({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="card col" style={{ marginBottom: 0, textAlign: "center" }}>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: "1.8rem", fontWeight: 600, color: "var(--series-blue)" }}>
+        {value.toLocaleString()}
+      </div>
+      <div className="muted small">{label}</div>
+    </div>
+  );
+}
+
+function VisitorsTab() {
+  const [summary, setSummary] = useState<VisitSummary | null>(null);
+  const [daily, setDaily] = useState<DailyVisitCount[] | null>(null);
+  const [visits, setVisits] = useState<PageView[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .adminVisitsSummary()
+      .then((res) => {
+        setSummary(res.summary);
+        setDaily(res.daily);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load visitor stats."));
+    api.adminVisitsRecent().then((res) => setVisits(res.visits));
+  }, []);
+
+  return (
+    <>
+      <div className="row" style={{ marginBottom: 20 }}>
+        <StatTile label="Total page views" value={summary?.totalViews ?? 0} />
+        <StatTile label="Unique visitors" value={summary?.uniqueVisitors ?? 0} />
+        <StatTile label="Views today" value={summary?.viewsToday ?? 0} />
+        <StatTile label="Views, last 7 days" value={summary?.views7d ?? 0} />
+        <StatTile label="Views, last 30 days" value={summary?.views30d ?? 0} />
+      </div>
+
+      <div className="card">
+        <h2>Traffic, last 30 days</h2>
+        {error && (
+          <p className="small" style={{ color: "var(--critical)" }}>
+            {error}
+          </p>
+        )}
+        {!daily ? (
+          <p className="muted small">Loading...</p>
+        ) : daily.length < 2 ? (
+          <p className="muted small">Not enough days of traffic yet to plot a trend.</p>
+        ) : (
+          <LineChart
+            series={[
+              {
+                label: "Views",
+                color: "var(--series-blue)",
+                points: daily.map((d, i) => ({ x: i, y: d.views })),
+              },
+              {
+                label: "Unique visitors",
+                color: "var(--series-orange)",
+                points: daily.map((d, i) => ({ x: i, y: d.uniqueVisitors })),
+              },
+            ]}
+            xLabel={`${daily[0].day} to ${daily[daily.length - 1].day}`}
+            yLabel="Count"
+          />
+        )}
+      </div>
+
+      <div className="card">
+        <h2>Recent visits</h2>
+        <p className="muted small">
+          One row per real page load (this app has no client-side router, so a full navigation is the only way a page
+          load happens — see App.tsx). Anonymous visitors are identified by a first-party cookie, not by account.
+        </p>
+        {!visits ? (
+          <p className="muted small">Loading...</p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Path</th>
+                  <th>Visitor</th>
+                  <th>User</th>
+                  <th>Referrer</th>
+                  <th>IP</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visits.map((v) => (
+                  <tr key={v.id}>
+                    <td className="small muted">{new Date(v.created_at).toLocaleString()}</td>
+                    <td className="small">{v.path}</td>
+                    <td className="small muted">{v.visitor_id.slice(0, 8)}</td>
+                    <td className="small">{v.user_email ?? "—"}</td>
+                    <td className="small muted">{v.referrer || "—"}</td>
+                    <td className="small muted">{v.ip ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 

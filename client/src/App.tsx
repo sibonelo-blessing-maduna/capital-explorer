@@ -6,7 +6,8 @@
  * navigation on the rare admin/back transitions — see ARCHITECTURE.md
  * "Why there's no client-side router".
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { api } from "./api";
 import { Header } from "./components/Header";
 import { UniverseEditor } from "./components/UniverseEditor";
 import { ParameterPanel } from "./components/ParameterPanel";
@@ -37,6 +38,10 @@ const TABS: { key: Tab; label: string }[] = [
 export function App() {
   const isAdminRoute = window.location.pathname.startsWith("/admin");
   const { user, googleConfigured, loading, refresh, logout } = useAuth();
+
+  useEffect(() => {
+    api.trackVisit(window.location.pathname, document.referrer).catch(() => {});
+  }, []);
 
   if (isAdminRoute) {
     if (loading) {

@@ -64,6 +64,20 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at    TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (actor_user_id) REFERENCES users(id)
 );
+
+CREATE TABLE IF NOT EXISTS page_views (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  visitor_id  TEXT NOT NULL,
+  user_id     INTEGER,
+  path        TEXT NOT NULL,
+  referrer    TEXT,
+  user_agent  TEXT,
+  ip          TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_page_views_created_at ON page_views(created_at);
+CREATE INDEX IF NOT EXISTS idx_page_views_visitor_id ON page_views(visitor_id);
 `);
 
 export interface UserRow {
@@ -172,5 +186,75 @@ export const AuditLog = {
   },
   recent(limit = 200) {
     return db.prepare("SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ?").all(limit);
+  },
+};
+
+export interface PageViewRow {
+  id: number;
+  visitor_id: string;
+  user_id: number | null;
+  path: string;
+  referrer: string | null;
+  user_agent: string | null;
+  ip: string | null;
+  created_at: string;
+  user_email: string | null;
+}
+
+export const PageViews = {
+  record(input: {
+    visitorId: string;
+    userId: number | null;
+    path: string;
+    referrer: string | null;
+    userAgent: string | null;
+    ip: string | null;
+  }) {
+    db.prepare(
+      `INSERT INTO page_views (visitor_id, user_id, path, referrer, user_agent, ip) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(input.visitorId, input.userId, input.path, input.referrer, input.userAgent, input.ip);
+  },
+  summary() {
+    const totalViews = (db.prepare("SELECT COUNT(*) as c FROM page_views").get() as { c: number }).c;
+    const uniqueVisitors = (db.prepare("SELECT COUNT(DISTINCT visitor_id) as c FROM page_views").get() as { c: number })
+      .c;
+    const viewsSince = (days: number) =>
+      (
+        db.prepare("SELECT COUNT(*) as c FROM page_views WHERE created_at >= datetime('now', ?)").get(`-${days} days`) as {
+          c: number;
+        }
+      ).c;
+    const uniqueVisitorsSince = (days: number) =>
+      (
+        db
+          .prepare("SELECT COUNT(DISTINCT visitor_id) as c FROM page_views WHERE created_at >= datetime('now', ?)")
+          .get(`-${days} days`) as { c: number }
+      ).c;
+    return {
+      totalViews,
+      uniqueVisitors,
+      viewsToday: viewsSince(1),
+      uniqueVisitorsToday: uniqueVisitorsSince(1),
+      views7d: viewsSince(7),
+      uniqueVisitors7d: uniqueVisitorsSince(7),
+      views30d: viewsSince(30),
+      uniqueVisitors30d: uniqueVisitorsSince(30),
+    };
+  },
+  dailyCounts(days = 30) {
+    return db
+      .prepare(
+        `SELECT date(created_at) as day, COUNT(*) as views, COUNT(DISTINCT visitor_id) as uniqueVisitors
+         FROM page_views WHERE created_at >= datetime('now', ?) GROUP BY date(created_at) ORDER BY day ASC`
+      )
+      .all(`-${days} days`) as { day: string; views: number; uniqueVisitors: number }[];
+  },
+  recent(limit = 200): PageViewRow[] {
+    return db
+      .prepare(
+        `SELECT pv.*, u.email as user_email FROM page_views pv LEFT JOIN users u ON u.id = pv.user_id
+         ORDER BY pv.created_at DESC LIMIT ?`
+      )
+      .all(limit) as PageViewRow[];
   },
 };

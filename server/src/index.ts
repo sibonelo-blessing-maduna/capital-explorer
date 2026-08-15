@@ -18,6 +18,7 @@ import { authRouter } from "./routes/auth";
 import { adminRouter } from "./routes/admin";
 import { settingsRouter } from "./routes/settings";
 import { configRouter } from "./routes/config";
+import { visitsRouter } from "./routes/visits";
 import { ensureSuperAdmin } from "./seed";
 import { ensureDefaultConfig } from "./defaultConfig";
 
@@ -77,6 +78,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/config", configRouter);
+app.use("/api/visits", visitsRouter);
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 

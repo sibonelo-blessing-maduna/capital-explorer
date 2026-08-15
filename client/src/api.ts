@@ -53,6 +53,11 @@ export const api = {
   adminSetConfig: (key: string, value: string) =>
     req<{ ok: true }>("/api/admin/config", { method: "POST", body: JSON.stringify({ key, value }) }),
   adminAuditLog: () => req<{ entries: AuditEntry[] }>("/api/admin/audit-log"),
+
+  trackVisit: (path: string, referrer: string) =>
+    req<{ ok: true }>("/api/visits", { method: "POST", body: JSON.stringify({ path, referrer }) }),
+  adminVisitsSummary: () => req<{ summary: VisitSummary; daily: DailyVisitCount[] }>("/api/admin/visits/summary"),
+  adminVisitsRecent: () => req<{ visits: PageView[] }>("/api/admin/visits/recent"),
 };
 
 export interface AdminUser {
@@ -74,5 +79,34 @@ export interface AuditEntry {
   action: string;
   target: string | null;
   details: string | null;
+  created_at: string;
+}
+
+export interface VisitSummary {
+  totalViews: number;
+  uniqueVisitors: number;
+  viewsToday: number;
+  uniqueVisitorsToday: number;
+  views7d: number;
+  uniqueVisitors7d: number;
+  views30d: number;
+  uniqueVisitors30d: number;
+}
+
+export interface DailyVisitCount {
+  day: string;
+  views: number;
+  uniqueVisitors: number;
+}
+
+export interface PageView {
+  id: number;
+  visitor_id: string;
+  user_id: number | null;
+  user_email: string | null;
+  path: string;
+  referrer: string | null;
+  user_agent: string | null;
+  ip: string | null;
   created_at: string;
 }

@@ -6,7 +6,7 @@
  * reasoning. Every mutating action is written to audit_log.
  */
 import { Router } from "express";
-import { Users, SiteConfig, AuditLog } from "../db";
+import { Users, SiteConfig, AuditLog, PageViews } from "../db";
 import { requireAdmin, requireSuperAdmin } from "../auth/middleware";
 
 export const adminRouter = Router();
@@ -85,4 +85,14 @@ adminRouter.post("/config", (req, res) => {
 
 adminRouter.get("/audit-log", (_req, res) => {
   res.json({ entries: AuditLog.recent(300) });
+});
+
+// --- Visitors ------------------------------------------------------------
+
+adminRouter.get("/visits/summary", (_req, res) => {
+  res.json({ summary: PageViews.summary(), daily: PageViews.dailyCounts(30) });
+});
+
+adminRouter.get("/visits/recent", (_req, res) => {
+  res.json({ visits: PageViews.recent(300) });
 });
